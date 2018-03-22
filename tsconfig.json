@@ -1,0 +1,24 @@
+{
+  "compileOnSave": true,
+  "compilerOptions": {
+    "moduleResolution": "node",
+    "target": "ES6",
+    "module": "ES2015",
+    "lib": ["ES2015", "ES2016", "ES2017"],
+    "sourceMap": true,
+    "declaration": true,
+    "allowSyntheticDefaultImports": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "declarationDir": "dist/types",
+    "outDir": "dist/es",
+    "typeRoots": ["node_modules/@types"],
+    "types": ["node","express"],
+    "rootDirs": ["src/","dist"]
+  },
+  "include": [ "src" ],
+  "atom": {
+    "rewriteTsconfig": false,
+    "formatOnSave": true
+  }
+}
