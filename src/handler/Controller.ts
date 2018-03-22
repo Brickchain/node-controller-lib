@@ -45,15 +45,15 @@ export class Controller {
         this.getBinding()
         .then(b => {
             if (b) {
-              console.info("binding: "+JSON.stringify(b))
+              this.logger.info("binding: "+JSON.stringify(b))
               fun(b)
             } else {
-              console.info("Not bound yet.")
+              this.logger.info("Not bound yet.")
             }
         })
         .catch(err => {
-            console.debug(err)
-            console.info("Not bound. Waiting for binding.")
+            this.logger.debug(err)
+            this.logger.info("Not bound. Waiting for binding.")
         })
     }
 
@@ -80,6 +80,19 @@ export class Controller {
         res.header('Access-Control-Allow-Headers', 'Content-Type,X-Requested-With,Authorization,Accept,Origin')
     }
 
+    public getBinding() : Promise<ControllerBinding> {
+
+        if (this.binding) return Promise.resolve(this.binding)
+        else return this.storage.get("binding")
+            .then((txt:string) => {
+              if (!txt) return undefined;
+              let json = JSON.parse(txt)
+              let binding = new ControllerBinding(json);
+              this.binding = binding;
+              return binding;
+            })
+    }
+
     // returns forwarded or otherwise reqested "http[s]://host[:port]""
     public myHost(req:express.Request) : string {
 
@@ -87,7 +100,7 @@ export class Controller {
         let fProto = req.get("x-forwarded-proto")
         if (fProto) fProto = fProto.split(',')[0]
         let baseurl = (fProto ? fProto : req.protocol) + '://' + (fHost ? fHost : req.get('host'))
-        if (fHost) console.info("forwarded-host: "+baseurl)
+        if (fHost) this.logger.info("forwarded-host: "+baseurl)
         return baseurl;
 
     }
@@ -110,14 +123,14 @@ export class Controller {
                 descriptor.adminUI = baseurl + baseuri + this.adminUI;
                 descriptor.bindURI = baseurl + baseuri + "/bind";
 
-                console.info("descriptor: ",
+                this.logger.info("descriptor: ",
                     JSON.stringify(descriptor, null, 2))
 
                 res.json(descriptor)
             })
             .catch(err => {
-                console.error("error! ", err)
-                if (err.stack) console.error("error! ", err.stack)
+                this.logger.error("error! ", err)
+                if (err.stack) this.logger.error("error! ", err.stack)
                 res.status(500).send("error: " + err)
             })
     }
@@ -126,7 +139,7 @@ export class Controller {
     public getDescriptor(): Promise<any> {
         return this.integrity.getMyID()
             .then((keyId:string) => {
-                console.debug("got key: "+keyId)
+                this.logger.debug("got key: "+keyId)
                 return this.integrity.getKey(keyId)
             })
             .then((mykey:any) => mykey.getPublicKey())
@@ -151,89 +164,85 @@ export class Controller {
 
         // ensure realm-admin-ui/browser can read from this host.
         this.addCORS(res)
-
         if (!req.body) {
             res.status(400).send("missing request params.")
             return
         }
 
-        console.info("post bind <= "+JSON.stringify(req.body))
-        console.info("binder got: "+req.body)
+        this.getBinding()
+        .then(bound => {
 
-        let signed = req.body
-        let verified = null
-        let realmKey = null
-        let binding:ControllerBinding = null
+          if (bound) {
+              res.status(400).send("controller already bound.")
+              return
+          }
 
-        this.integrity.verify(signed)
+          this.logger.info("post bind <= "+JSON.stringify(req.body))
+          this.logger.info("binder got: "+req.body)
+
+          let signed = req.body
+          let verified = null
+          let realmKey = null
+          let binding:ControllerBinding = null
+
+          return this.integrity.verify(signed)
             .then((v:any) => {
-                verified = v
-                console.info("binder verified: "+v)
+              verified = v
+              this.logger.info("binder verified: "+v)
 
-                return Promise.all([
-                    jose.JWK.asKey(verified.header.jwk),
-                    verified.payload.toString("utf8")
-                ])
+              return Promise.all([
+                  jose.JWK.asKey(verified.header.jwk),
+                  verified.payload.toString("utf8")
+              ])
             })
             .then((l:any[]) => {
-                realmKey = l[0]
-                let data = l[1]
-                let b = JSON.parse(data)
-                console.info("binder received: ", data)
-                binding = new ControllerBinding(b)
-                return this.setBinding(binding, realmKey)
+              realmKey = l[0]
+              let data = l[1]
+              let b = JSON.parse(data)
+              this.logger.info("binder received: ", data)
+              binding = new ControllerBinding(b)
+              return this.setBinding(binding, realmKey)
             })
             .then((done:boolean)=> {
-                console.info("responded: ", 201, "data: ", JSON.stringify(done))
-                let realmName = binding.realmDescriptor.name;
-                let realmUrl = "https://"+realmName+"/realm-api"
-                this.listActions = this.bindFunc(realmUrl,realmName,binding)
-                res.status(201).send("")
+              this.logger.info("responded: ", 201, "data: ", JSON.stringify(done))
+              let realmName = binding.realmDescriptor.name;
+              let realmUrl = "https://"+realmName+"/realm-api"
+              this.listActions = this.bindFunc(realmUrl,realmName,binding)
+              res.status(201).send("")
             })
-            .catch((err:Error) => {
-              console.error("error! ", err)
-              if (err.stack) console.error("error! ", err.stack)
-              res.status(500).send("error: " + err)
-            })
+        })
+        .catch((err:Error) => {
+          this.logger.error("error! ", err)
+          if (err.stack) this.logger.error("error! ", err.stack)
+          res.status(500).send("error: " + err)
+        })
+
     }
 
     // DELETE /controller/
     public unbinder(req:express.Request, res:express.Response) : void {
         this.getBinding()
         .then(binding => {
-            console.info("requesting binding delete.")
+            this.logger.info("requesting binding delete.")
             this.binding = null;
             return this.storage.delete("binding")
         })
         .then(done => {
-            console.info("deleted: "+done)
+            this.logger.info("deleted: "+done)
             res.status(201).send("")
         })
         .catch(err => {
-          console.error("error! ", err)
-          if (err.stack) console.error("error! ", err.stack)
+          this.logger.error("error! ", err)
+          if (err.stack) this.logger.error("error! ", err.stack)
           res.status(500).send("error: " + err)
         })
-    }
-
-    public getBinding() : Promise<ControllerBinding> {
-
-        if (this.binding) return Promise.resolve(this.binding)
-        else return this.storage.get("binding")
-            .then((txt:string) => {
-              if (!txt) return undefined;
-              let json = JSON.parse(txt)
-              let binding = new ControllerBinding(json);
-              this.binding = binding;
-              return binding;
-            })
     }
 
     // create binding with realm
     public setBinding(binding:ControllerBinding, realmKey: jose.Key) : Promise<any> {
 
-        console.info("binding: ", JSON.stringify(binding, null, 2))
-        console.info(" with realmKey: ", JSON.stringify(realmKey, null, 2))
+        this.logger.info("binding: ", JSON.stringify(binding, null, 2))
+        this.logger.info(" with realmKey: ", JSON.stringify(realmKey, null, 2))
 
         return Promise.all([
             this.integrity.verify(binding.controllerCertificateChain),
@@ -254,8 +263,8 @@ export class Controller {
                 let mand = JSON.parse(l[1])
                 let ckey:jose.Key = l[2]
                 let mkey:jose.Key = l[3]
-                console.debug("cert: ", cert)
-                console.debug("mandate: ", mand)
+                this.logger.debug("cert: ", cert)
+                this.logger.debug("mandate: ", mand)
                 // TODO: store keys to crypt
                 this.binding = binding
                 return this.storage.setObj("binding", binding)
