@@ -3,7 +3,7 @@ import * as crypto from "crypto"
 import * as jose from "node-jose"
 
 import {Logger} from './Logger';
-import {Key,Realm,Mandate} from '../model'
+import {Key,Realm,Mandate,ControllerBinding} from '../model'
 import {Storage} from "./Storage"
 
 var logger = Logger.create("Integrity");
@@ -19,7 +19,7 @@ export class Integrity {
     private keys: {[name:string]:Key} = {} // mapping (name->Key)
     private myOwnKeyID:string = "" // our private key name
     private secret:string // secret used to encrypt keys
-
+    private binding:ControllerBinding;
     private verifier: jose.JWS.Verifier;
 
     public constructor(storage: Storage, secret: string) {
@@ -270,5 +270,21 @@ export class Integrity {
           .then(otherThumbprint => myThumbprint == otherThumbprint ? Promise.resolve() : Promise.reject("key history didn't match"))
         )
     }
+
+    // in case we are a controller - we also need to store binding
+    public setControllerBinding(cb: ControllerBinding):Promise<string> {
+      return this.storage.setObj("binding", cb.toJSON())
+    }
+
+    public getControllerBinding():Promise<ControllerBinding> {
+      return this.storage.getObj("binding")
+      .then(obj=>new ControllerBinding(obj))
+    }
+
+    public deleteControllerBinding():Promise<string> {
+      return this.storage.delete("binding")
+    }
+
+
 
 }

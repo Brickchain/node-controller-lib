@@ -3,10 +3,8 @@ import * as express  from "express";
 
 import { Logger } from "../service/Logger"
 import { Integrity } from "../service/Integrity"
-import { Storage } from "../service/Storage"
 
 
-import * as path from "path";
 import * as jose from "node-jose"
 
 import {ActionDescriptor,ControllerBinding} from "../model"
@@ -22,23 +20,19 @@ import {ActionDescriptor,ControllerBinding} from "../model"
 export class Controller {
 
     logger:Logger
-
-    storage:Storage  // store controller binding as "binding"
     integrity:Integrity // store realm and controller keys.
 
     apiUri:string;
-    adminUI:string; // TODO: document
+    adminUI:string;
     binding:any;
     bindFunc:(realmUrl:string,realmId:string,binding:any)=>any
     listActions:(baseurl:string,baseuri:string,realmName:string)=>Array<ActionDescriptor>
 
     constructor(
-        storage:Storage,
         integrity:Integrity,
         fun:(binding:any)=>void) {
 
         this.logger = Logger.create("handler.Controller")
-        this.storage = storage
         this.integrity = integrity
         this.bindFunc = fun
 
@@ -55,6 +49,10 @@ export class Controller {
             this.logger.debug(err)
             this.logger.info("Not bound. Waiting for binding.")
         })
+    }
+
+    public setAdminURL(url:string) {
+        this.adminUI = url;
     }
 
     /**
@@ -83,11 +81,8 @@ export class Controller {
     public getBinding() : Promise<ControllerBinding> {
 
         if (this.binding) return Promise.resolve(this.binding)
-        else return this.storage.get("binding")
-            .then((txt:string) => {
-              if (!txt) return undefined;
-              let json = JSON.parse(txt)
-              let binding = new ControllerBinding(json);
+        else return this.integrity.getControllerBinding()
+            .then((binding:ControllerBinding) => {
               this.binding = binding;
               return binding;
             })
@@ -225,7 +220,7 @@ export class Controller {
         .then(binding => {
             this.logger.info("requesting binding delete.")
             this.binding = null;
-            return this.storage.delete("binding")
+            return this.integrity.deleteControllerBinding()
         })
         .then(done => {
             this.logger.info("deleted: "+done)
@@ -267,7 +262,7 @@ export class Controller {
                 this.logger.debug("mandate: ", mand)
                 // TODO: store keys to crypt
                 this.binding = binding
-                return this.storage.setObj("binding", binding)
+                return this.integrity.setControllerBinding(binding)
             })
     }
 
