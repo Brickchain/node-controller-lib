@@ -4,7 +4,6 @@ import * as express  from "express";
 import { Logger } from "../service/Logger"
 import { Integrity } from "../service/Integrity"
 
-
 import * as jose from "node-jose"
 
 import {ActionDescriptor,ControllerBinding} from "../model"
@@ -22,6 +21,7 @@ export class Controller {
     logger:Logger
     integrity:Integrity // store realm and controller keys.
 
+    bindingSecret:string;
     apiUri:string;
     adminUI:string;
     binding:any;
@@ -30,7 +30,14 @@ export class Controller {
 
     constructor(
         integrity:Integrity,
-        fun:(binding:any)=>void) {
+        fun:(binding:any)=>void,
+        bindingSecret?:string) {
+
+        if (bindingSecret) {
+          this.bindingSecret = bindingSecret;
+        } else {
+          this.bindingSecret = ""+Math.floor(Math.random()*100000000);
+        }
 
         this.logger = Logger.create("handler.Controller")
         this.integrity = integrity
@@ -42,12 +49,13 @@ export class Controller {
               this.logger.info("binding: "+JSON.stringify(b))
               fun(b)
             } else {
-              this.logger.info("Not bound yet.")
+              this.logger.info("Not bound yet, Secret: "+this.bindingSecret)
             }
         })
         .catch(err => {
             this.logger.debug(err)
-            this.logger.info("Not bound. Waiting for binding.")
+            this.logger.info("Not bound. Waiting for binding. Secret: " +
+                              this.bindingSecret)
         })
     }
 
@@ -157,11 +165,21 @@ export class Controller {
     // POST /controller/
     public binder(req:express.Request, res:express.Response) : void {
 
-        // ensure realm-admin-ui/browser can read from this host.
         this.addCORS(res)
+
         if (!req.body) {
-            res.status(400).send("missing request params.")
+            res.status(400).send("missing post data.")
             return
+        }
+
+        if (!req.query.secret) {
+            res.status(400).send("missing '?secret=...'")
+            return
+        }
+
+        if (req.query.secret != this.bindingSecret) {
+          res.status(400).send("secret param does not match secret.")
+          return
         }
 
         this.getBinding()
@@ -203,7 +221,7 @@ export class Controller {
               let realmName = binding.realmDescriptor.name;
               let realmUrl = "https://"+realmName+"/realm-api"
               this.listActions = this.bindFunc(realmUrl,realmName,binding)
-              res.status(201).send("")
+              res.status(201).json({})
             })
         })
         .catch((err:Error) => {
