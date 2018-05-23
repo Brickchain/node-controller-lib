@@ -1,6 +1,5 @@
 
 import typescript from 'rollup-plugin-typescript2'
-import builtins from 'rollup-plugin-node-builtins'
 import globals from 'rollup-plugin-node-globals';
 import commonjs from 'rollup-plugin-commonjs'
 import resolve from 'rollup-plugin-node-resolve'
@@ -25,9 +24,7 @@ export default {
     // Compile TypeScript files
     typescript(),
     // allow node builtins like crypto to be referenced
-    // see bottom of: https://github.com/calvinmetcalf/rollup-plugin-node-builtins
     globals(),
-    builtins(),
     // Allow bundling cjs modules (unlike webpack, rollup doesn't understand cjs)
     commonjs(),
     // Allow node_modules resolution, so you can use 'external' to control
